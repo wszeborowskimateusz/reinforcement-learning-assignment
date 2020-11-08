@@ -64,19 +64,12 @@ class ValueIterationAgent(ValueEstimationAgent):
         "*** YOUR CODE HERE ***"
         states = self.mdp.getStates()
         for _ in range(self.iterations):
-            vNew = self.values.copy()
+            # To acheive batch version
+            vTmp = self.values.copy()
             for state in states:
-                bestActionValue = None
-                actions = self.mdp.getPossibleActions(state)
-                for action in actions:
-                    actionValue = self.computeQValueFromValues(state, action)
-                    if bestActionValue is None or actionValue > bestActionValue:
-                        bestActionValue = actionValue
-
-                vNew[state] = bestActionValue or 0
+                vTmp[state] = self._getBestActionWithValue(state)[1]
             
-            
-            self.values = vNew
+            self.values = vTmp
 
     def getValue(self, state):
         """
@@ -91,12 +84,11 @@ class ValueIterationAgent(ValueEstimationAgent):
           value function stored in self.values.
         """
         "*** YOUR CODE HERE ***"
-
         Ts = self.mdp.getTransitionStatesAndProbs(state, action)
         actionValue = 0
         for nextState, T in Ts:
             R = self.mdp.getReward(state, action, nextState)
-            actionValue += T * (R + (self.discount * self.values[nextState]))
+            actionValue += T * (R + (self.discount * self.getValue(nextState)))
 
         return actionValue
 
@@ -111,9 +103,10 @@ class ValueIterationAgent(ValueEstimationAgent):
           terminal state, you should return None.
         """
         "*** YOUR CODE HERE ***"
+        return self._getBestActionWithValue(state)[0]
+
+    def _getBestActionWithValue(self, state):
         legalActions = self.mdp.getPossibleActions(state)
-        if not legalActions:
-            return None
         bestActionValue = None
         bestAction = None
         for action in legalActions:
@@ -122,7 +115,7 @@ class ValueIterationAgent(ValueEstimationAgent):
                 bestActionValue = actionValue
                 bestAction = action
         
-        return bestAction
+        return bestAction, bestActionValue or 0
 
 
     def getPolicy(self, state):
@@ -167,22 +160,11 @@ class AsynchronousValueIterationAgent(ValueIterationAgent):
         states = self.mdp.getStates()
         statesIndex = 0
         for _ in range(self.iterations):
-            vNew = self.values.copy()
             state = states[statesIndex]
             statesIndex = (statesIndex + 1) % len(states)
             if self.mdp.isTerminal(state):
                 continue
-            bestActionValue = None
-            actions = self.mdp.getPossibleActions(state)
-            for action in actions:
-                actionValue = self.computeQValueFromValues(state, action)
-                if bestActionValue is None or actionValue > bestActionValue:
-                    bestActionValue = actionValue
-
-            vNew[state] = bestActionValue or 0
-            
-            
-            self.values = vNew
+            self.values[state] = self._getBestActionWithValue(state)[1]
 
 class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
     """
@@ -205,7 +187,7 @@ class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
         "*** YOUR CODE HERE ***"
         predecessors = {}
         for state in self.mdp.getStates():
-            predecessors[state] = self.__countPredecessor(state)
+            predecessors[state] = self.__findPredecessor(state)
 
         priorityQueue = util.PriorityQueue()
 
@@ -221,24 +203,17 @@ class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
                 return
             state = priorityQueue.pop()
             if not self.mdp.isTerminal(state):
-                bestActionValue = None
-                actions = self.mdp.getPossibleActions(state)
-                for action in actions:
-                    actionValue = self.computeQValueFromValues(state, action)
-                    if bestActionValue is None or actionValue > bestActionValue:
-                        bestActionValue = actionValue
-                self.values[state] = bestActionValue or 0
+                self.values[state] = self._getBestActionWithValue(state)[1]
 
             for p in predecessors[state]:
                 diff = self.__findDiff(p)
                 if diff > self.theta:
                     priorityQueue.update(p, -diff)
 
-    def __countPredecessor(self, goalState):
-        allStates = self.mdp.getStates()
+    def __findPredecessor(self, goalState):
         predecessors = set()
 
-        for state in allStates:
+        for state in self.mdp.getStates():
             for action in self.mdp.getPossibleActions(state):
                 T = self.mdp.getTransitionStatesAndProbs(state, action)
                 for nextState, prob in T:
@@ -249,14 +224,8 @@ class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
 
     def __findDiff(self, state):
         currentValue = self.values[state]
-        bestValue = None
-        for action in self.mdp.getPossibleActions(state):
-            actionValue = self.computeQValueFromValues(state, action)
+        bestValue = self._getBestActionWithValue(state)[1]
 
-            if bestValue is None or actionValue > bestValue:
-                bestValue = actionValue
-
-        bestValue = bestValue or 0
         diff = abs(currentValue - bestValue)
 
         return diff

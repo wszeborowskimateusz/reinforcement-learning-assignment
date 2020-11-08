@@ -87,9 +87,11 @@ class QLearningAgent(ReinforcementAgent):
 
         for action in legalActions:
           actionValue = self.getQValue(state, action)
-          if bestActionValue is None or actionValue > bestActionValue or (actionValue == bestActionValue and util.flipCoin(0.5)):
-            bestActionValue = actionValue
-            bestAction = action
+          if bestActionValue is None or actionValue > bestActionValue \
+            or (actionValue == bestActionValue and util.flipCoin(0.5)):
+            # this helps to break ties randomly
+              bestActionValue = actionValue
+              bestAction = action
 
         return bestAction   
 
